@@ -1,4 +1,4 @@
-const CACHE='rail-outlaws-v0.6.0';
+const CACHE='rail-outlaws-v0.6.1';
 const ASSETS=['./','./index.html','./styles.css','./manifest.webmanifest','./assets/icon-192.png','./assets/icon-512.png','./assets/character-action-atlas-v2-transparent.png','./src/app.js','./src/engine.js','./src/ai.js','./src/presentation.js','./src/sound.js','./src/version.js'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()))});
