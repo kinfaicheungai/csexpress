@@ -2,7 +2,7 @@ import {LOOKS,characterSVG} from './characters.js';
 import {Action,ALL_ACTIONS,Floor,Facing,BanditState,Phase,createGame,setProgram,beginResolution,step,endRound,getPlayer,resolutionOrder,resolveLootAmbiguity,findFireTarget} from './engine.js';
 import {publicGameView,chooseAIProgram} from './ai.js';
 import {APP_VERSION} from './version.js';
-import {gunshot,impact,footsteps,climbing,horseRide,carriageBreak,unlockAudio,setSoundEnabled,soundEnabled} from './sound.js';
+import {gunshot,impact,footsteps,climbing,horseRide,carriageBreak,unlockAudio,setSoundEnabled,soundEnabled,soundState} from './sound.js';
 import {shotEndX,constrainShotDirection} from './presentation.js';
 const characters=[{name:'Mei',culture:'East Asian',color:'#f8f7ef',accent:'#98d9ff',artFilter:'none'},{name:'Cole',culture:'White',color:'#111820',accent:'#eef4f1',artFilter:'saturate(.9) brightness(.88)'},{name:'Amara',culture:'Black',color:'#ffd22e',accent:'#39280d',artFilter:'saturate(1.18) brightness(1.06)'},{name:'Mateo',culture:'South American',color:'#8b4dcc',accent:'#f1d7ff',artFilter:'saturate(1.2)'},{name:'Anika',culture:'Indian',color:'#20e868',accent:'#d9ffe4',artFilter:'saturate(1.65) brightness(1.12)'},{name:'Kirra',culture:'Aboriginal Australian',color:'#1885e5',accent:'#d7efff',artFilter:'saturate(1.3) brightness(1.04)'}];let game,selected=[],selectedCharacter=0,busy=false,autoPlay=false;
 const lastPositions=new Map();
@@ -22,8 +22,12 @@ window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();def
 if(matchMedia('(display-mode: standalone)').matches||navigator.standalone)$('#installButton').hidden=true;
 $('#installButton').onclick=async()=>{if(deferredInstall){deferredInstall.prompt();await deferredInstall.userChoice;deferredInstall=null}else $('#installHelp').showModal()};
 $('#closeInstall').onclick=()=>$('#installHelp').close();
-document.addEventListener('pointerdown',()=>unlockAudio(),{once:true,capture:true});
-$('#soundToggle').onclick=async()=>{setSoundEnabled(!soundEnabled());if(soundEnabled())await unlockAudio();$('#soundToggle').textContent=soundEnabled()?'🔊 Sound':'🔇 Muted';};
+async function activateAudio(){if(!soundEnabled()||soundState()==='running')return;const ready=await unlockAudio();$('#soundToggle').textContent=ready?'🔊 Sound':'👆 Tap for sound';$('#soundToggle').dataset.audio=ready?'ready':'locked';}
+// Keep this listener: iOS can suspend Web Audio again after locking or backgrounding the app.
+document.addEventListener('pointerdown',activateAudio,{capture:true});
+document.addEventListener('touchend',activateAudio,{capture:true,passive:true});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')$('#soundToggle').dataset.audio='locked'});
+$('#soundToggle').onclick=async()=>{setSoundEnabled(!soundEnabled());if(soundEnabled()){const ready=await unlockAudio();$('#soundToggle').textContent=ready?'🔊 Sound':'👆 Tap for sound';$('#soundToggle').dataset.audio=ready?'ready':'locked'}else{$('#soundToggle').textContent='🔇 Muted';$('#soundToggle').dataset.audio='muted'}};
 function buildCharacters(){$('#characterChoices').innerHTML=characters.map((c,i)=>`<button type="button" class="character-choice ${i===selectedCharacter?'selected':''}" data-character="${i}" style="--choice-color:${c.color};--choice-accent:${c.accent}"><span class="atlas-art portrait" style="${atlasStyle(i,1)}"></span><strong>${c.name}</strong><small>${c.culture}</small></button>`).join('');document.querySelectorAll('[data-character]').forEach(b=>b.onclick=()=>{selectedCharacter=Number(b.dataset.character);buildCharacters();buildFacingSetup()});}
 function chosenLineup(count){const others=characters.map((_,i)=>i).filter(i=>i!==selectedCharacter);return [selectedCharacter,...others.slice(0,count-1)];}
 function buildFacingSetup(){const count=Number($('#aiCount').value)+1,lineup=chosenLineup(count);$('#facingSetup').innerHTML='';lineup.forEach((characterIndex,i)=>$('#facingSetup').insertAdjacentHTML('beforeend',`<label>${i===0?'You · ':`CPU · `}${characters[characterIndex].name}<select data-facing="${i}"><option value="FRONT">Face engine/front ←</option><option value="REAR">Face caboose/rear →</option></select></label>`));}
