@@ -17,7 +17,7 @@ export function createGame({ players, lootValues, firstPlayerId }) {
   if (!Array.isArray(lootValues) || lootValues.length !== wagonCount) throw new Error(`Exactly ${wagonCount} loot values are required.`);
   const sections = [{ id:'LOCO', type:'LOCOMOTIVE', lootValue:null, insideOccupants:[], roofOccupants:[] }];
   for (let i=1;i<=wagonCount;i++) sections.push({ id:`W${i}`, type:'WAGON', lootValue:lootValues[i-1], insideOccupants:[], roofOccupants:[] });
-  const playerStates = players.map((p, order) => ({ id:p.id, name:p.name, color:p.color, characterIndex:p.characterIndex??order%6, isHuman:!!p.isHuman, seat:order, sectionId:null, floor:Floor.INSIDE, facing:p.facing, state:BanditState.STANDING, programmedActions:[], lootCards:[] }));
+  const playerStates = players.map((p, order) => ({ id:p.id, name:p.name, color:p.color, accent:p.accent, characterIndex:p.characterIndex??order%6, isHuman:!!p.isHuman, seat:order, sectionId:null, floor:Floor.INSIDE, facing:p.facing, state:BanditState.STANDING, programmedActions:[], lootCards:[] }));
   const firstIndex=playerStates.findIndex(p=>p.id===firstPlayerId);
   if (firstIndex<0) throw new Error('First player does not exist.');
   const placementOrder=[...playerStates.slice(firstIndex),...playerStates.slice(0,firstIndex)];
