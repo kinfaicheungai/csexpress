@@ -59,5 +59,5 @@ body[data-phase=RESOLUTION] .telegraph{animation-duration:2.4s}
 @keyframes trainBob{from{transform:translateY(0)}to{transform:translateY(1.5px)}}
 @keyframes wheelTurn{to{transform:rotate(360deg)}}
 @media(max-width:760px){.landscape:after{top:164px}.telegraph{animation-duration:2.7s}}
-@media(prefers-reduced-motion:reduce){.landscape:after,.mesa,.telegraph,.sun,.train,.train-wheels i{animation:none!important}}
+@media(prefers-reduced-motion:reduce){.landscape:after{animation:groundRush 3.3s linear infinite!important}.mesa.far{animation:farDrift 52s linear infinite!important}.mesa.near{animation:nearDrift 26s linear infinite!important}.telegraph{animation:poleRush 7s linear infinite!important}.sun{animation:sunDrift 90s linear infinite alternate!important}.train,.train-wheels i{animation:none!important}}
 .figure{transform-origin:0 0}.train-skin circle{display:none}.train-wheels{position:absolute;left:16px;right:16px;bottom:14px;display:flex;justify-content:space-between;pointer-events:none}.train-wheels i{display:block;width:32px;height:32px;background:radial-gradient(circle,#deb875 0 3px,#29373b 4px 8px,#deb875 9px 11px,#29373b 12px);border:3px solid #deb875;border-radius:50%;box-shadow:0 3px 3px #0005}@media(max-width:760px){.train-wheels{bottom:7px;left:15px;right:15px}.train-wheels i{width:28px;height:28px}}
