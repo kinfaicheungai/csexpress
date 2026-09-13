@@ -17,7 +17,7 @@ export function createGame({ players, lootValues, firstPlayerId }) {
   if (!Array.isArray(lootValues) || lootValues.length !== wagonCount) throw new Error(`Exactly ${wagonCount} loot values are required.`);
   const sections = [{ id:'LOCO', type:'LOCOMOTIVE', lootValue:null, insideOccupants:[], roofOccupants:[] }];
   for (let i=1;i<=wagonCount;i++) sections.push({ id:`W${i}`, type:'WAGON', lootValue:lootValues[i-1], insideOccupants:[], roofOccupants:[] });
-  const playerStates = players.map((p, order) => ({ id:p.id, name:p.name, color:p.color, accent:p.accent, characterIndex:p.characterIndex??order%6, isHuman:!!p.isHuman, seat:order, sectionId:null, floor:Floor.INSIDE, facing:p.facing, state:BanditState.STANDING, programmedActions:[], lootCards:[] }));
+  const playerStates = players.map((p, order) => ({ id:p.id, name:p.name, color:p.color, accent:p.accent, characterIndex:p.characterIndex??order%6, isHuman:!!p.isHuman, seat:order, sectionId:null, floor:Floor.INSIDE, facing:p.facing, entrySide:p.facing===Facing.FRONT?Facing.REAR:Facing.FRONT, state:BanditState.STANDING, programmedActions:[], lootCards:[] }));
   const firstIndex=playerStates.findIndex(p=>p.id===firstPlayerId);
   if (firstIndex<0) throw new Error('First player does not exist.');
   const placementOrder=[...playerStates.slice(firstIndex),...playerStates.slice(0,firstIndex)];
@@ -79,10 +79,11 @@ function removeFromLane(game,p) {
 function insertAtEntryEdge(game,p,sectionIndex,direction) {
   const section=game.trainSections[sectionIndex], lane=section[laneKey(p.floor)];
   p.sectionId=section.id;
-  if(direction===Facing.FRONT) lane.push(p.id); else lane.unshift(p.id);
+  p.entrySide=direction===Facing.FRONT?Facing.REAR:Facing.FRONT;
+  if(p.entrySide===Facing.REAR) lane.push(p.id); else lane.unshift(p.id);
 }
 function placeForwardmost(game,p,section,floor) {
-  removeFromLane(game,p); p.sectionId=section.id; p.floor=floor; section[laneKey(floor)].unshift(p.id);
+  removeFromLane(game,p); p.sectionId=section.id; p.floor=floor; p.entrySide=Facing.FRONT; section[laneKey(floor)].unshift(p.id);
 }
 function leaveTrain(game,p) { removeFromLane(game,p); p.sectionId=null; p.state=BanditState.OFF_TRAIN_PENDING; }
 function log(game,text,type='ACTION'){ game.actionLog.push({round:game.roundNumber,type,text}); }
@@ -120,8 +121,12 @@ function resolveNormal(game,p,action){
   else if(action===Action.MOVE){ const stayed=moveOne(game,p); log(game,`${p.name} moved ${stayed?'one section':'off the train'}.`); }
   else if(action===Action.CHANGE_FLOOR){
     const section=getSection(game,p.sectionId); removeFromLane(game,p); p.floor=p.floor===Floor.INSIDE?Floor.ROOF:Floor.INSIDE;
-    // Ambiguity-safe policy: preserve arrival as a separate deterministic rule hook.
-    section[laneKey(p.floor)].push(p.id); log(game,`${p.name} changed to ${p.floor}.`);
+    // Preserve the longitudinal side from which this bandit entered the section.
+    // A vertical floor change must not erase front/rear arrival history.
+    p.entrySide??=p.facing===Facing.FRONT?Facing.REAR:Facing.FRONT;
+    const lane=section[laneKey(p.floor)];
+    if(p.entrySide===Facing.FRONT)lane.unshift(p.id);else lane.push(p.id);
+    log(game,`${p.name} changed to ${p.floor}.`);
   }
   else if(action===Action.FIRE) fire(game,p);
   else if(action===Action.REFLEX){ p.state=BanditState.STUNNED; log(game,`${p.name}'s Reflex prediction failed.`); }
@@ -149,13 +154,13 @@ export function resolveAction(game,playerId,action){
 function checkLastSurvivor(game){
   const aboard=game.players.filter(onTrain);
   const pending=game.players.filter(p=>p.state===BanditState.OFF_TRAIN_PENDING);
-  if(aboard.length===1 && pending.length===0){ game.phase=Phase.GAME_OVER; game.winnerIds=[aboard[0].id]; return true; }
+  if(aboard.length===1 && pending.length===0){ game.unresolved=null; game.phase=Phase.GAME_OVER; game.winnerIds=[aboard[0].id]; return true; }
   return false;
 }
 
 function checkHumanDefeat(game){
   const human=game.players.find(p=>p.isHuman);
-  if(human?.state===BanditState.ELIMINATED){game.phase=Phase.GAME_OVER;game.winnerIds=[];game.outcome='HUMAN_DEFEAT';return true;}
+  if(human?.state===BanditState.ELIMINATED){game.unresolved=null;game.phase=Phase.GAME_OVER;game.winnerIds=[];game.outcome='HUMAN_DEFEAT';return true;}
   return false;
 }
 
@@ -185,8 +190,13 @@ export function endRound(game){
     let candidates=survivors.filter(p=>game.trainSections.findIndex(s=>s.id===p.sectionId)===maxIndex);
     if(candidates.some(p=>p.floor===Floor.ROOF)) candidates=candidates.filter(p=>p.floor===Floor.ROOF);
     if(candidates.length===1){ candidates[0].lootCards.push({sectionId:caboose.id,value:caboose.lootValue}); log(game,`${candidates[0].name} claimed ${caboose.id}.`,'LOOT'); }
-    else if(candidates.length>1){ game.unresolved={type:'LOOT_TIE_SAME_POSITION',playerIds:candidates.map(p=>p.id),wagon:caboose}; log(game,`Loot unresolved: ${candidates.map(p=>p.name).join(', ')} are tied in the same lane.`,'AMBIGUITY'); }
+    else if(candidates.length>1){ game.unresolved={type:'LOOT_TIE_SAME_POSITION',playerIds:candidates.map(p=>p.id),wagon:caboose}; game.phase=Phase.ROUND_END; log(game,`Loot unresolved: ${candidates.map(p=>p.name).join(', ')} are tied in the same lane.`,'AMBIGUITY'); return; }
   }
+  finishEndRound(game);
+}
+
+function finishEndRound(game){
+  const survivors=game.players.filter(onTrain);
   if(survivors.length===1){ game.phase=Phase.GAME_OVER; game.winnerIds=[survivors[0].id]; return; }
   if(game.trainSections.length===1){
     const maxCards=Math.max(...survivors.map(p=>p.lootCards.length)); let tied=survivors.filter(p=>p.lootCards.length===maxCards);
@@ -200,5 +210,5 @@ export function endRound(game){
 
 export function resolveLootAmbiguity(game,playerId){
   if(game.unresolved?.type!=='LOOT_TIE_SAME_POSITION' || !game.unresolved.playerIds.includes(playerId)) throw new Error('Invalid loot tie choice.');
-  getPlayer(game,playerId).lootCards.push({sectionId:game.unresolved.wagon.id,value:game.unresolved.wagon.lootValue}); game.unresolved=null;
+  getPlayer(game,playerId).lootCards.push({sectionId:game.unresolved.wagon.id,value:game.unresolved.wagon.lootValue}); game.unresolved=null; finishEndRound(game);
 }
